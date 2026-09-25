@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Console</title>
+<style>
+  :root{
+    --bg:#0d0f12;
+    --panel:#15181d;
+    --line:#262b32;
+    --text:#e8eaed;
+    --muted:#8a929e;
+    --accent:#4fd1a5;
+    --accent-dim:#1f3d33;
+    --err:#e5484d;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:var(--sans);
+    padding:20px;
+    padding-top:calc(20px + env(safe-area-inset-top,0px));
+    padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  }
+  .wrap{max-width:640px;margin:0 auto}
+  h1{font-size:15px;font-weight:600;letter-spacing:.2px;color:var(--muted);margin:0 0 18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  input[type=text],input[type=password],textarea,select{
+    width:100%;background:#0a0c0f;border:1px solid var(--line);color:var(--text);
+    padding:10px 11px;border-radius:7px;font-size:14px;font-family:var(--mono);
+    outline:none;
+  }
+  input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:90px;font-family:var(--sans)}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  .modelrow{display:flex;gap:8px;margin-top:8px}
+  .modelrow select{flex:1}
+  .modelrow input{flex:1;display:none}
+  .modelrow.custom select{display:none}
+  .modelrow.custom input{display:block}
+  .toggle{
+    font-size:11px;color:var(--accent);cursor:pointer;user-select:none;
+    margin-top:6px;display:inline-block;
+  }
+  button{
+    background:var(--accent);color:#06120d;border:none;border-radius:7px;
+    padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer;width:100%;
+  }
+  button.tab{
+    flex:1;width:auto;background:var(--panel);color:var(--muted);
+    border:1px solid var(--line);padding:9px;
+  }
+  button.tab.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
+  button:active{opacity:.85}
+  button:disabled{opacity:.5;cursor:default}
+  .out{
+    white-space:pre-wrap;word-break:break-word;font-family:var(--mono);
+    font-size:12.5px;line-height:1.5;color:var(--text);
+    max-height:50vh;overflow-y:auto;
+  }
+  .muted{color:var(--muted);font-size:12px}
+  .err{color:var(--err)}
+  .ok{color:var(--accent)}
+  .foot{font-size:11px;color:var(--muted);text-align:center;margin-top:14px}
+  .badge{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 6px;display:inline-block;margin-top:6px}
+  .tabs{display:flex;gap:8px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI API CONSOLE</h1>
+
+  <div class="tabs">
+    <button type="button" class="tab active" id="tabOpenAI">OpenAI</button>
+    <button type="button" class="tab" id="tabGemini">Gemini</button>
+  </div>
+
+  <div class="card">
+    <label id="keyLabel" for="key">API key (sk-proj-...)</label>
+    <input type="password" id="key" placeholder="sk-proj-..." autocomplete="off">
+    <span class="toggle" id="toggleKey">show key</span>
+  </div>
+
+  <div class="card">
+    <label>Model</label>
+    <div class="modelrow" id="modelrow">
+      <select id="modelSelect">
+        <option value="gpt-4o">gpt-4o</option>
+        <option value="gpt-4o-mini">gpt-4o-mini</option>
+        <option value="gpt-4.1">gpt-4.1</option>
+        <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+        <option value="gpt-4.1-nano">gpt-4.1-nano</option>
+        <option value="o3">o3</option>
+        <option value="o3-mini">o3-mini</option>
+        <option value="o4-mini">o4-mini</option>
+        <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+      </select>
+      <input type="text" id="modelCustom" placeholder="custom model id">
+    </div>
+    <span class="toggle" id="toggleCustom">use custom model id</span>
+  </div>
+
+  <div class="card">
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt" placeholder="Say hello"></textarea>
+    <div class="row" style="margin-top:8px">
+      <div>
+        <label for="maxtok">Max tokens</label>
+        <input type="text" id="maxtok" value="500">
+      </div>
+      <div>
+        <label for="temp">Temperature</label>
+        <input type="text" id="temp" value="0.7">
+      </div>
+    </div>
+  </div>
+
+  <button id="send">Send request</button>
+
+  <div class="card" style="margin-top:12px" id="outCard">
+    <label>Response</label>
+    <div class="out muted" id="out">Nothing sent yet.</div>
+  </div>
+
+  <div class="foot" id="foot">Key stays in this page only — never stored, never sent anywhere but api.openai.com.</div>
+</div>
+
+<script>
+window.onerror = function(msg){
+  const o = document.getElementById('out');
+  if (o) { o.className = 'out err'; o.textContent = 'Script error: ' + msg; }
+};
+
+const PROVIDERS = {
+  openai: {
+    keyPlaceholder: 'sk-proj-...',
+    keyLabel: 'API key (sk-proj-...)',
+    foot: 'Key stays in this page only — never stored, never sent anywhere but api.openai.com.',
+    models: ['gpt-4o','gpt-4o-mini','gpt-4.1','gpt-4.1-mini','gpt-4.1-nano','o3','o3-mini','o4-mini','gpt-3.5-turbo']
+  },
+  gemini: {
+    keyPlaceholder: 'AIzaSy...',
+    keyLabel: 'API key (AIzaSy...)',
+    foot: 'Key stays in this page only — never stored, never sent anywhere but generativelanguage.googleapis.com.',
+    models: ['gemini-2.5-pro','gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro','gemini-1.5-flash']
+  }
+};
+
+let provider = 'openai';
+
+const keyEl = document.getElementById('key');
+const keyLabel = document.getElementById('keyLabel');
+const footEl = document.getElementById('foot');
+const tabOpenAI = document.getElementById('tabOpenAI');
+const tabGemini = document.getElementById('tabGemini');
+const modelSelect = document.getElementById('modelSelect');
+const modelCustom = document.getElementById('modelCustom');
+const modelrow = document.getElementById('modelrow');
+const toggleCustom = document.getElementById('toggleCustom');
+const out = document.getElementById('out');
+const sendBtn = document.getElementById('send');
+
+function renderModels(){
+  modelSelect.innerHTML = PROVIDERS[provider].models
+    .map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+function setProvider(p){
+  provider = p;
+  tabOpenAI.classList.toggle('active', p === 'openai');
+  tabGemini.classList.toggle('active', p === 'gemini');
+  keyEl.placeholder = PROVIDERS[p].keyPlaceholder;
+  keyLabel.textContent = PROVIDERS[p].keyLabel;
+  footEl.textContent = PROVIDERS[p].foot;
+  renderModels();
+}
+tabOpenAI.onclick = () => setProvider('openai');
+tabGemini.onclick = () => setProvider('gemini');
+renderModels();
+
+const toggleKey = document.getElementById('toggleKey');
+toggleKey.onclick = () => {
+  const showing = keyEl.type === 'text';
+  keyEl.type = showing ? 'password' : 'text';
+  toggleKey.textContent = showing ? 'show key' : 'hide key';
+};
+
+let customMode = false;
+toggleCustom.onclick = () => {
+  customMode = !customMode;
+  modelrow.classList.toggle('custom', customMode);
+  toggleCustom.textContent = customMode ? 'use dropdown list' : 'use custom model id';
+};
+
+async function callOpenAI(key, model, prompt, maxTok, temp){
+  const isReasoning = /^o[0-9]/.test(model);
+  const body = { model, messages: [{ role: 'user', content: prompt }] };
+  if (isReasoning) body.max_completion_tokens = maxTok;
+  else {
+    body.max_tokens = maxTok;
+    if (!isNaN(temp)) body.temperature = temp;
+  }
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error('Error ' + res.status + ': ' + (data.error?.message || JSON.stringify(data)));
+
+  const text = data.choices?.[0]?.message?.content ?? JSON.stringify(data, null, 2);
+  const usage = data.usage
+    ? `\n\n---\nprompt: ${data.usage.prompt_tokens}  completion: ${data.usage.completion_tokens}  total: ${data.usage.total_tokens}`
+    : '';
+  return text + usage;
+}
+
+async function callGemini(key, model, prompt, maxTok, temp){
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: maxTok }
+  };
+  if (!isNaN(temp)) body.generationConfig.temperature = temp;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error('Error ' + res.status + ': ' + (data.error?.message || JSON.stringify(data)));
+
+  const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') ?? JSON.stringify(data, null, 2);
+  const usage = data.usageMetadata
+    ? `\n\n---\nprompt: ${data.usageMetadata.promptTokenCount}  completion: ${data.usageMetadata.candidatesTokenCount}  total: ${data.usageMetadata.totalTokenCount}`
+    : '';
+  return text + usage;
+}
+
+sendBtn.onclick = async () => {
+  const key = keyEl.value.trim();
+  const model = customMode ? modelCustom.value.trim() : modelSelect.value;
+  const prompt = document.getElementById('prompt').value.trim();
+  const maxTok = parseInt(document.getElementById('maxtok').value, 10) || 500;
+  const temp = parseFloat(document.getElementById('temp').value);
+
+  if (!key) { out.textContent = 'Enter your API key.'; out.className = 'out err'; return; }
+  if (!model) { out.textContent = 'Enter or pick a model id.'; out.className = 'out err'; return; }
+  if (!prompt) { out.textContent = 'Enter a prompt.'; out.className = 'out err'; return; }
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Sending...';
+  out.className = 'out muted';
+  out.textContent = 'Waiting for response...';
+
+  try {
+    const result = provider === 'gemini'
+      ? await callGemini(key, model, prompt, maxTok, temp)
+      : await callOpenAI(key, model, prompt, maxTok, temp);
+    out.className = 'out ok';
+    out.textContent = result;
+  } catch (e) {
+    out.className = 'out err';
+    out.textContent = 'Request failed: ' + e.message;
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send request';
+  }
+};
+</script>
+</body>
+      </html>
+      
